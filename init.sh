@@ -1,7 +1,25 @@
 #!/usr/bin/env bash
 
+#   Copyright 2014 Steve Francia
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
 ############################  SETUP PARAMETERS
 debug_mode='0'
+app_name='chan-vim'
+[ -z "$APP_PATH" ] && APP_PATH="$HOME/.chan-vim"
+[ -z "$REPO_URI" ] && REPO_URI='https://github.com/pqhchan/chan-vim.git'
+[ -z "$REPO_BRANCH" ] && REPO_BRANCH='master'
 [ -z "$VUNDLE_URI" ] && VUNDLE_URI="https://github.com/gmarik/vundle.git"
 
 ############################  BASIC SETUP TOOLS
@@ -68,7 +86,7 @@ do_backup() {
         msg "Attempting to back up your original vim configuration."
         today=`date +%Y%m%d_%s`
         for i in "$1" "$2" "$3"; do
-            [ -e "$i" ] && [ ! -L "$i" ] && mv -v "$i" "$i.$today";
+            [ -e "$i" ] && [ ! -L "$i" ] && mv -v "$i" "$i_back";
         done
         ret="$?"
         success "Your original vim configuration has been backed up."
@@ -98,6 +116,26 @@ sync_repo() {
     debug
 }
 
+create_symlinks() {
+    local source_path="$1"
+    local target_path="$2"
+
+    lnif "$source_path" "$target_path/.vim"
+    mkdir $source_path/.backup
+    mkdir $source_path/.swp
+    mkdir $source_path/.undo
+
+
+    if program_exists "nvim"; then
+        lnif "$source_path"           "$target_path/.config/nvim"
+        lnif "$source_path/vimrc"     "$target_path/.config/nvim/init.vim"
+    fi
+
+    ret="$?"
+    success "Setting up vim symlinks."
+    debug
+}
+
 setup_vundle() {
     local system_shell="$SHELL"
     export SHELL='/bin/sh'
@@ -115,20 +153,70 @@ setup_vundle() {
     debug
 }
 
-############################ MAIN()
-variable_set "$HOME"
-program_must_exist "vim"
-program_must_exist "git"
+install_vim() {
+    variable_set "$HOME"
+    program_must_exist "vim"
+    program_must_exist "git"
 
-do_backup       "$HOME/.vim" \
-                "$HOME/.vimrc" \
-                "$HOME/.gvimrc"
+    do_backup       "$HOME/.vim" \
+                    "$HOME/.vimrc" \
+                    "$HOME/.gvimrc"
 
-sync_repo       "$HOME/.vim/bundle/vundle" \
-                "$VUNDLE_URI" \
-                "master" \
-                "vundle"
+    sync_repo       "$APP_PATH" \
+                    "$REPO_URI" \
+                    "$REPO_BRANCH" \
+                    "$app_name"
 
-setup_vundle    "$HOME/.vim/vimrc.bundles"
+    create_symlinks "$APP_PATH" \
+                    "$HOME"
 
-msg             "`date +%Y` ok"
+    sync_repo       "$HOME/.vim/bundle/vundle" \
+                    "$VUNDLE_URI" \
+                    "master" \
+                    "vundle"
+
+    setup_vundle    "$HOME/.vim/vimrc.bundles"
+
+    msg             "`date +%Y` ok"
+}
+
+uninstall_vim() {
+    variable_set "$HOME"
+    if [[ -d "$HOME/.vim" ]]; then
+        if [[ "$(readlink $HOME/.vim)" =~ \.chan-vim$ ]]; then
+            rm "$HOME/.vim"
+	    ret="$?"
+            success "Uninstall ok"
+            if [[ -d "$HOME/.vim_back" ]]; then
+                mv "$HOME/.vim_back" "$HOME/.vim"
+	    	ret="$?"
+                success "Recover from $HOME/.vim_back"
+            fi
+        fi
+    fi
+    if [[ -f "$HOME/.vimrc_back" ]]; then
+        mv "$HOME/.vimrc_back" "$HOME/.vimrc"
+	ret="$?"
+        success "Recover from $HOME/.vimrc_back"
+    fi
+    msg             "`date +%Y` ok"
+}
+
+main () {
+  if [ $# -gt 0 ]
+  then
+    case $1 in
+      --uninstall|-u)
+        uninstall_vim
+        exit 0
+        ;;
+      --install|-i)
+        install_vim
+        exit 0
+    esac
+  else
+    install_vim
+  fi
+}
+
+main $@
