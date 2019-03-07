@@ -86,7 +86,7 @@ do_backup() {
         msg "Attempting to back up your original vim configuration."
         today=`date +%Y%m%d_%s`
         for i in "$1" "$2" "$3"; do
-            [ -e "$i" ] && [ ! -L "$i" ] && mv -v "$i" "$i_back";
+            [ -e "$i" ] && [ ! -L "$i" ] && mv -v "$i" "${i}_back";
         done
         ret="$?"
         success "Your original vim configuration has been backed up."
